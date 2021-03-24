@@ -13,6 +13,5 @@ class Evaluator:
         Evaluate a classifier by training and testing it. Applies Bayes layer
         :param classifier:
         """
-        classifier.apply_bayes = True
         net = classifier.train()
         classifier.test(net)

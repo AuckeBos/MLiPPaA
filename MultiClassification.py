@@ -1,18 +1,11 @@
-from datetime import datetime
-
-import matplotlib
-import numpy as np
-from sklearn.model_selection import train_test_split
-from tensorflow.keras.layers import Dense, BatchNormalization, LeakyReLU, Softmax
-from tensorflow.keras.models import Sequential
+import tensorflow as tf
+from tensorflow.keras.layers import Dense, Softmax
 from tensorflow.keras.optimizers import Adam
 
-import tensorflow as tf
 from BaseClassification import BaseClassifier
 from BayesLayer import BayesLayer
 from DataLoader import DataLoader
-
-matplotlib.use('TkAgg')
+from helpers import write_log
 
 
 class MultiClassifier(BaseClassifier):
@@ -31,6 +24,7 @@ class MultiClassifier(BaseClassifier):
         net.add(Dense(5))
         net.add(Softmax())
         if self.apply_bayes:
+            write_log('Adding Bayes layer')
             net.add(BayesLayer(self.train_prior, self.test_prior))
         return net
 

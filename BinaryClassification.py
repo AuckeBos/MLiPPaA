@@ -11,6 +11,7 @@ import tensorflow as tf
 from BaseClassification import BaseClassifier
 from BayesLayer import BayesLayer
 from DataLoader import DataLoader
+from helpers import write_log
 
 matplotlib.use('TkAgg')
 
@@ -30,6 +31,7 @@ class BinaryClassifier(BaseClassifier):
         net = super().get_net()
         net.add(Dense(1, activation='sigmoid'))
         if self.apply_bayes:
+            write_log('Adding Bayes layer')
             net.add(BayesLayer(self.train_prior, self.test_prior))
         return net
 

@@ -13,6 +13,7 @@ from tensorflow.python.keras.engine import training
 
 import tensorflow as tf
 from EvaluationCallback import EvaluationCallback
+from helpers import write_log
 
 
 class BaseClassifier(abc.ABC):
@@ -49,6 +50,12 @@ class BaseClassifier(abc.ABC):
     # If true, add a bayes layer during test time
     apply_bayes = False
 
+    # If these values are not None, rebalance the set to this distribution, by down-sampling the majority classes
+    # Format should be [percent_of_class1, percent_of_class2, ...], percentages in range (0,1)
+    balance_test_set: ndarray = None
+    balance_validation_set: ndarray = None
+
+
     def __init__(self):
         """
         Add tensorflow callbacks
@@ -66,12 +73,15 @@ class BaseClassifier(abc.ABC):
         :param train:  The train data
         :param test:  The test data
         """
-        train = train.value_counts().array
-        test = test.value_counts().array
+        train = train.value_counts().sort_index(ascending=False).array
+        test = test.value_counts().sort_index(ascending=False).array
         train_sum = np.sum(train)
         test_sum = np.sum(test)
-        self.train_prior = np.array([x / train_sum for x in train]) * len(train)
-        self.test_prior = np.array([x / test_sum for x in test]) * len(test)
+        self.train_prior = np.array([x / train_sum for x in train])
+        self.test_prior = np.array([x / test_sum for x in test])
+        if self.apply_bayes:
+            print(f'Training prior is {self.train_prior}')
+            print(f'Test prior is {self.test_prior}')
 
     def split(self, x, y):
         """
@@ -83,10 +93,14 @@ class BaseClassifier(abc.ABC):
         """
         # Split data
         x_train_val, self.x_test, y_train_val, self.y_test = train_test_split(x, y, test_size=0.1)
+        # Rebalance if desired
+        if self.balance_test_set is not None:
+            write_log(f'Rebalancing test set to {self.balance_test_set}')
+            self.x_test, self.y_test = self.__rebalance(self.x_test, self.y_test, self.balance_test_set)
         # Compute priors
         self.compute_priors(y_train_val, self.y_test)
         # Add Evaluation callback
-        self.callbacks.append(EvaluationCallback(self.x_test, self.y_test, self.logdir))
+        # self.callbacks.append(EvaluationCallback(self.x_test, self.y_test, self.logdir))
         # Split train_val into train and val
         self.x_train, self.x_val, self.y_train, self.y_val = train_test_split(x_train_val, y_train_val, test_size=.2 / 0.9)
 
@@ -94,6 +108,34 @@ class BaseClassifier(abc.ABC):
         self.train_iter = tf.data.Dataset.from_tensor_slices((self.x_train.values, self.y_train.values)).batch(self.batch_size).shuffle(self.x_train.shape[0])
         self.val_iter = tf.data.Dataset.from_tensor_slices((self.x_val.values, self.y_val.values)).batch(self.batch_size)
         self.test_iter = tf.data.Dataset.from_tensor_slices((self.x_test.values, self.y_test.values)).batch(self.batch_size)
+
+    @staticmethod
+    def __rebalance(x: pd.DataFrame, y: pd.DataFrame, target_distribution: []):
+        """
+        Rebalance a dataset by downsampling the majority classes
+        :param x: The train data
+        :param y: The labels
+        :param target_distribution: The desired new distribution. Should be of length len(y) and sum to 1
+        :return:
+        """
+        previous_size = len(y)
+        target_distribution = np.array(target_distribution) * 100
+        current_counts = np.array(y.value_counts().array)
+        one_percents = current_counts / target_distribution
+        count_of_one_percent = min(one_percents)
+        new_counts = np.array(target_distribution * count_of_one_percent).astype(int)
+        rebalanced_indices = []
+        for label, count in zip(y.columns.values, new_counts):
+            all_indices = y.loc[y[label] == 1].index
+            sample = np.random.choice(all_indices.array, count, replace=False)
+            rebalanced_indices.extend(sample)
+        x = x.loc[rebalanced_indices]
+        y = y.loc[rebalanced_indices]
+
+        new_size = len(y)
+        drop_count = previous_size - new_size
+        write_log(f'Rebalancing dropped {drop_count} of the {previous_size} rows ({drop_count / previous_size * 100}%)')
+        return x, y
 
     @abc.abstractmethod
     def get_net(self) -> training.Model:
@@ -160,8 +202,10 @@ class BaseClassifier(abc.ABC):
         - Use verbose output to show accuracy and loss during training
         :return the trained network
         """
+        write_log('Loading data')
         self.load_data()
         net = self.compile_net()
+        write_log('Training network')
 
         history = net.fit(
             self.train_iter,
@@ -170,6 +214,7 @@ class BaseClassifier(abc.ABC):
             verbose=1,
             callbacks=self.callbacks,
         )
+        write_log('Training finished')
         return net
 
     def test(self, net: training.Model):

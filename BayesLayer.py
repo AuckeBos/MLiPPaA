@@ -1,6 +1,8 @@
 from numpy import ndarray
 
 import tensorflow as tf
+from scipy.special import softmax
+import numpy as np
 
 
 class BayesLayer(tf.keras.layers.Layer):
@@ -25,10 +27,15 @@ class BayesLayer(tf.keras.layers.Layer):
         self.train_prior = train_prior
         self.test_prior = test_prior
 
-    def call(self, predictions, **kwargs):
+    def call(self, predictions, training=None):
         """
         Apply bayes, if in test phase
         :rtype: object
         """
+        if training:
+            return predictions
+        print('Applying bayes')
         posterior = predictions / self.train_prior * self.test_prior
-        return tf.keras.backend.in_test_phase(posterior, predictions)
+        # Apply softmax to ensure that values sum to one
+        posterior = tf.keras.layers.Softmax()(posterior)
+        return posterior
