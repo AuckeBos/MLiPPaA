@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 from numpy.core._multiarray_umath import ndarray
 from sklearn.preprocessing import MinMaxScaler
-import matplotlib.pyplot as plt
 
 
 class DataLoader:

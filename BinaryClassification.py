@@ -1,26 +1,16 @@
-from datetime import datetime
-
-import matplotlib
-import numpy as np
-from sklearn.model_selection import train_test_split
-from tensorflow.keras.layers import Dense, BatchNormalization, LeakyReLU, Dropout
-from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import Adam
 
 import tensorflow as tf
 from BaseClassification import BaseClassifier
-from BayesLayer import BayesLayer
 from DataLoader import DataLoader
-from helpers import write_log
-
-matplotlib.use('TkAgg')
 
 
 class BinaryClassifier(BaseClassifier):
 
     def __init__(self):
         super().__init__()
-        self.batch_size = 128
+        self.batch_size = 256
         self.num_epochs = 50
 
     def get_net(self):
@@ -30,9 +20,6 @@ class BinaryClassifier(BaseClassifier):
         """
         net = super().get_net()
         net.add(Dense(1, activation='sigmoid'))
-        if self.apply_bayes:
-            write_log('Adding Bayes layer')
-            net.add(BayesLayer(self.train_prior, self.test_prior))
         return net
 
     def load_data(self):
@@ -52,5 +39,5 @@ class BinaryClassifier(BaseClassifier):
         optimizer = Adam(learning_rate=.001)
         loss = tf.keras.losses.BinaryCrossentropy()
         net = self.get_net()
-        net.compile(loss=loss, optimizer=optimizer, metrics=['accuracy'])
+        net.compile(loss=loss, optimizer=optimizer, metrics=['accuracy', self.f1])
         return net

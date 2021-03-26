@@ -10,8 +10,9 @@ class Evaluator:
     @staticmethod
     def evaluate(classifier: BaseClassifier):
         """
-        Evaluate a classifier by training and testing it. Applies Bayes layer
+        Evaluate a classifier by training and testing it
         :param classifier:
         """
         net = classifier.train()
         classifier.test(net)
+        return net

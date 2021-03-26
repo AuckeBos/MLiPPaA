@@ -5,15 +5,24 @@ from MultiClassification import MultiClassifier
 
 def assignment_a():
     classifier = BinaryClassifier()
-    Evaluator.evaluate(classifier)
+    classifier.apply_bayes = True
+    classifier.rebalance_distribution = [1 - 0.04, 0.04]
+    net = Evaluator.evaluate(classifier)
+    classifier.test(net)
 
 
 def assignment_b():
     classifier = MultiClassifier()
     classifier.apply_bayes = True
-    classifier.balance_test_set = [0.04] + ([(1 - 0.04) / 4] * 4)
-    classifier.balance_validation_set = classifier.balance_test_set
-    Evaluator.evaluate(classifier)
+    classifier.rebalance_distribution = [0.04] + ([(1 - 0.04) / 4] * 4)
+    classifier.balance_training_set = False
+    #
+    # classifier.load_data()
+    # net = classifier.compile_net()
+    # classifier.test(net)
+
+    net = Evaluator.evaluate(classifier)
+    classifier.test(net)
 
 
-assignment_b()
+assignment_a()
