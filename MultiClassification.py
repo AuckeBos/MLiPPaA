@@ -3,15 +3,17 @@ from tensorflow.keras.layers import Dense, Softmax
 from tensorflow.keras.optimizers import Adam
 
 from BaseClassification import BaseClassifier
-from BayesLayer import BayesLayer
 from DataLoader import DataLoader
 from helpers import write_log
 from tensorflow.python.keras.engine import training
 from sklearn.metrics import accuracy_score
 import numpy as np
+import tensorflow.keras.backend as K
 
 
 class MultiClassifier(BaseClassifier):
+    # If is not none, use these weights for weighted cross entropy loss
+    class_weights = None
 
     def __init__(self):
         super().__init__()
@@ -36,6 +38,33 @@ class MultiClassifier(BaseClassifier):
         x, y = data_loader.load_data()
         self.split(x, y)
 
+    @staticmethod
+    def weighted_categorical_crossentropy(weights):
+        """
+        https://gist.github.com/wassname/ce364fddfc8a025bfab4348cf5de852d
+        A weighted version of keras.objectives.categorical_crossentropy
+
+        Variables:
+            weights: numpy array of shape (C,) where C is the number of classes
+
+        Usage:
+            weights = np.array([0.5,2,10]) # Class one at 0.5, class 2 twice the normal weights, class 3 10x.
+            loss = weighted_categorical_crossentropy(weights)
+            model.compile(loss=loss,optimizer='adam')
+        """
+
+        weights = K.variable(weights)
+
+        def loss(y_true, y_pred):
+            # clip to prevent NaN's and Inf's
+            y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
+            # calc
+            loss = y_true * K.log(y_pred) * weights
+            loss = -K.sum(loss, -1)
+            return loss
+
+        return loss
+
     def compile_net(self):
         """
         Use adam optimizer, categorical cross entropy
@@ -43,7 +72,10 @@ class MultiClassifier(BaseClassifier):
         """
 
         optimizer = Adam(learning_rate=.0001)
-        loss = tf.keras.losses.CategoricalCrossentropy()
+        if self.class_weights is not None:
+            loss = self.weighted_categorical_crossentropy(self.class_weights)
+        else:
+            loss = tf.keras.losses.CategoricalCrossentropy()
         net = self.get_net()
         net.compile(loss=loss, optimizer=optimizer, metrics=['accuracy', self.f1])
         return net

@@ -10,12 +10,13 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Dense, BatchNormalization, LeakyReLU, Dropout
 from tensorflow.keras.models import Sequential
 from tensorflow.python.data import Dataset
-from tensorflow.python.keras.callbacks import EarlyStopping
+from tensorflow.python.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.python.keras.engine import training
 
 import tensorflow as tf
 from EvaluationCallback import EvaluationCallback
 from helpers import write_log
+from matplotlib import pyplot as plt
 
 
 class BaseClassifier(abc.ABC):
@@ -52,12 +53,13 @@ class BaseClassifier(abc.ABC):
     # If true apply bayes during test phase
     apply_bayes = False
 
-    # If this value is not None, rebalance the set to this distribution, by down-sampling the majority classes
+    # If this value is not None, rebalance the test set to this distribution, by down-sampling the majority classes
     # Format should be [percent_of_class1, percent_of_class2, ...], percentages in range (0,1)
-    rebalance_distribution: ndarray = None
+    rebalance_test: ndarray = None
 
-    # If true, apply the rebalancing of the test set on the training/validation set too
-    balance_training_set: bool = False
+    # If this value is not None, rebalance the train and validation set to this distribution, by down-sampling the majority classes
+    # Format should be [percent_of_class1, percent_of_class2, ...], percentages in range (0,1)
+    rebalance_train_val: bool = False
 
     def __init__(self):
         """
@@ -67,8 +69,9 @@ class BaseClassifier(abc.ABC):
         """
         self.logdir = f'./tensorboard/{datetime.now().strftime("%m-%d %H:%M")}'
         tensorboard = tf.keras.callbacks.TensorBoard(log_dir=self.logdir)
-        es = EarlyStopping(monitor='val_f1', mode='max', patience=5, verbose=1)
-        self.callbacks = [tensorboard, es]
+        es = EarlyStopping(patience=8, verbose=1)
+        reduce_lr_on_plateau = ReduceLROnPlateau(factor=.4, patience=3, verbose=1)
+        self.callbacks = [tensorboard, es, reduce_lr_on_plateau]
 
     def compute_priors(self, train, test):
         """
@@ -98,23 +101,21 @@ class BaseClassifier(abc.ABC):
             The results are ofcourse not used for training, but rather to show progress on the test set during training
         """
         # Split data
-        x_train_val, self.x_test, y_train_val, self.y_test = train_test_split(x, y, test_size=0.1)
+        x_train_val, self.x_test, y_train_val, self.y_test = train_test_split(x, y, test_size=0.1, random_state=1337)
         # Rebalance if desired
-        if self.rebalance_distribution is not None:
-            write_log(f'Rebalancing test set to {self.rebalance_distribution}')
-            self.x_test, self.y_test = self.__rebalance(self.x_test, self.y_test, self.rebalance_distribution)
+        if self.rebalance_test is not None:
+            write_log(f'Rebalancing test set to {self.rebalance_test}')
+            self.x_test, self.y_test = self.__rebalance(self.x_test, self.y_test, self.rebalance_test)
         # Compute priors
         self.compute_priors(y_train_val, self.y_test)
         # Add Evaluation callback
         self.callbacks.append(EvaluationCallback(self))
         # Split train_val into train and val
-        self.x_train, self.x_val, self.y_train, self.y_val = train_test_split(x_train_val, y_train_val, test_size=.2 / 0.9)
-        if self.balance_training_set:
-            if self.rebalance_distribution is None:
-                raise Exception('Cannot rebalance training set, please set desired distribution at rebalance_distribution')
-            write_log('Also rebalancing training and validation set')
-            self.x_train, self.y_train = self.__rebalance(self.x_train, self.y_train, self.rebalance_distribution)
-            self.x_val, self.y_val = self.__rebalance(self.x_val, self.y_val, self.rebalance_distribution)
+        self.x_train, self.x_val, self.y_train, self.y_val = train_test_split(x_train_val, y_train_val, test_size=.2 / 0.9, random_state=1338)
+        if self.rebalance_train_val is not None:
+            write_log(f'Rebalancing train and validation set to {self.rebalance_train_val}')
+            self.x_train, self.y_train = self.__rebalance(self.x_train, self.y_train, self.rebalance_train_val)
+            self.x_val, self.y_val = self.__rebalance(self.x_val, self.y_val, self.rebalance_train_val)
 
         # Create iterators
         self.train_iter = tf.data.Dataset.from_tensor_slices((self.x_train.values, self.y_train.values)).batch(self.batch_size).shuffle(self.x_train.shape[0])
@@ -182,29 +183,28 @@ class BaseClassifier(abc.ABC):
         # net.add(BatchNormalization())
         # net.add(LeakyReLU())
         net.add(Dense(256))
-        net.add(Dropout(0.3))
         net.add(BatchNormalization())
+        net.add(Dropout(0.3))
         net.add(LeakyReLU())
         net.add(Dense(128))
         # net.add(Dropout(0.4))
         net.add(BatchNormalization())
         net.add(LeakyReLU())
         net.add(Dense(64))
-        net.add(Dropout(0.4))
         net.add(BatchNormalization())
+        net.add(Dropout(0.4))
         net.add(LeakyReLU())
         net.add(Dense(32))
         # net.add(Dropout(0.3))
         net.add(BatchNormalization())
         net.add(LeakyReLU())
         net.add(Dense(16))
-        net.add(Dropout(0.2))
         net.add(BatchNormalization())
+        net.add(Dropout(0.2))
         net.add(LeakyReLU())
         net.add(Dense(8))
         net.add(BatchNormalization())
         net.add(LeakyReLU())
-        net.is_testing = False
         return net
 
     @abc.abstractmethod
@@ -226,7 +226,7 @@ class BaseClassifier(abc.ABC):
         Train the network
         - Visualize result using tensorboard
         - Use verbose output to show accuracy and loss during training
-        :return the trained network
+        :return the trained network and the history
         """
         write_log('Loading data')
         self.load_data()
@@ -241,7 +241,16 @@ class BaseClassifier(abc.ABC):
             callbacks=self.callbacks,
         )
         write_log('Training finished')
-        return net
+        # self.__show_history(history)
+        return net, history
+
+    def __show_history(self, history):
+        plt.plot(history.history['accuracy'])
+        plt.plot(history.history['val_accuracy'])
+        plt.ylabel('Accuracy')
+        plt.xlabel('Epoch')
+        plt.legend(['train', 'val'], loc='upper left')
+        plt.show()
 
     def _apply_bayes(self, y_pred):
         """
@@ -254,11 +263,12 @@ class BaseClassifier(abc.ABC):
         posterior = np.array([test_prior * y / train_prior for y in y_pred])
         return posterior
 
-    def test(self, net: training.Model, verbose=True):
+    def test_binary(self, net: training.Model, verbose=True):
         """
-        Test the network
+        Test the networks performance on binary classification
         :param net the trained network
         """
+        # Labels to binary
         if isinstance(self.y_test, pd.DataFrame):
             y_true = self.y_test['4top'].to_numpy()
         else:
@@ -268,10 +278,13 @@ class BaseClassifier(abc.ABC):
         # Convert single value probs to 2 value probs
         if y_pred.shape[1] == 1:
             y_pred = np.array([[y[0], 1 - y[0]] for y in y_pred])
+        # Apply bayes
         if self.apply_bayes:
             y_pred = self._apply_bayes(y_pred)
 
-        classes = [np.argmax(y, axis=0) for y in y_pred]
+        # Select the class with the highest probability
+        classes = np.argmax(y_pred, axis=1)
+        # Convert to binary
         y_pred = [int(y == 0) for y in classes]
 
         pred_true = sum(y_pred)
@@ -286,8 +299,40 @@ class BaseClassifier(abc.ABC):
             write_log(f'Test loss, f1, and accuracy are {loss}, {f1}, {accuracy}')
         return loss, f1, accuracy
 
+    def test(self, net: training.Model, verbose=True):
+        """
+        Test the network
+        :param net the trained network
+        """
+        # Get numpy data
+        y_true = self.y_test.to_numpy()
+        y_pred = net.predict(self.x_test)
+        # Apply bayes
+        if self.apply_bayes:
+            y_pred = self._apply_bayes(y_pred)
+
+        # Compute categorical cross entropy
+        loss = log_loss(y_true, y_pred)
+        # Convert probs to hard classes: select class with max probability
+        y_pred = np.argmax(y_pred, axis=1)
+        # One-hot encode
+        y_pred = np.eye(5)[y_pred]
+        # Compute accuracy and f1
+        accuracy = accuracy_score(y_true, y_pred)
+        f1 = f1_score(y_true, y_pred, average='macro')
+        if verbose:
+            write_log(f'Test loss, f1, and accuracy are {loss}, {f1}, {accuracy}')
+        return loss, f1, accuracy
+
     @staticmethod
     def f1(y_true, y_pred):
+        """
+        F1 loss function
+        @param y_true:
+        @param y_pred:
+        @return:
+        """
+
         def recall(y_true, y_pred):
             true_positives = K.mean(K.round(K.clip(y_true * y_pred, 0, 1)))
             possible_positives = K.mean(K.round(K.clip(y_true, 0, 1)))
