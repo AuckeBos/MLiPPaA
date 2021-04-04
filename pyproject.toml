@@ -10,7 +10,7 @@ tensorflow-gpu = "2.2.0"
 tensorboard = "2.2.0"
 pandas = "^1.2.3"
 scikit-learn = "^0.24.1"
-numpy = "^1.20.1"
+numpy = "1.19.5"
 matplotlib = "^3.3.4"
 
 [tool.poetry.dev-dependencies]

@@ -1,3 +1,6 @@
+import numpy as np
+
+
 def write_log(msg, error=False, kill=False):
     """
     Write a log to stdout
@@ -9,3 +12,12 @@ def write_log(msg, error=False, kill=False):
     print(f'[{prefix}] - {msg}')
     if kill:
         exit()
+
+
+def to_ndarray(arr):
+    """
+    Convert a list of lists to a multidimensional numpy array
+    @param arr:
+    @return:
+    """
+    return np.array([np.array(x) for x in arr])

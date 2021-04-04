@@ -1,15 +1,15 @@
-from BaseClassification import BaseClassifier
-from MultiClassification import MultiClassifier
-import itertools
-import numpy as np
-import json
 import csv
+import itertools
+import json
+
+from BaseClassification import BaseClassifier
+from RecurrentClassification import RecurrentClassifier
 from helpers import write_log
+
 
 class Evaluator:
     """
     Simple static class that provides evaluation functionality
-    For now only provide the evaluate() method, which evaluates performance of a classifier
     """
 
     @staticmethod
@@ -24,6 +24,9 @@ class Evaluator:
 
     @staticmethod
     def compare_design_choices():
+        """
+        Compare a combination of 8 different design choices. Save training history in json format
+        """
         crossentropy_weights = [10, 1, 1, 1, 1]
         rebalance_to = [0.04] + ([(1 - 0.04) / 4] * 4)
         apply_bayes_options = [True, False]
@@ -32,7 +35,7 @@ class Evaluator:
         weighted_loss_options = [True, False]
         comparison = []
         for i, (apply_bayes, rebalance_test, rebalance_trainval, weighted_loss) in enumerate(list(itertools.product(apply_bayes_options, rebalance_testset_options, rebalance_trainvalidation_options, weighted_loss_options))):
-            classifier = MultiClassifier()
+            classifier = RecurrentClassifier()
             classifier.apply_bayes = apply_bayes
             if rebalance_test:
                 classifier.rebalance_test = rebalance_to
@@ -50,11 +53,11 @@ class Evaluator:
             history = history.history
             history['lr'] = [float(lr) for lr in history['lr']]
             comparison.append({
-                'apply_bayes' : apply_bayes,
-                'rebalance_test' : rebalance_test,
-                'rebalance_trainval' : rebalance_trainval,
-                'weighted_loss' : weighted_loss,
-                'history' : history
+                'apply_bayes': apply_bayes,
+                'rebalance_test': rebalance_test,
+                'rebalance_trainval': rebalance_trainval,
+                'weighted_loss': weighted_loss,
+                'history': history
             })
             write_log(f'Done training {i}')
         with open('comparison.json', 'w+') as fp:
@@ -62,7 +65,10 @@ class Evaluator:
 
     @staticmethod
     def evaluate_comparison(file):
-        content = None
+        """
+        After compare_design_choices has been ran, we have a comparison in json format. Convert to csv by saving the best values for each hyper parameter combination
+        @param file: The json comparison file
+        """
         with open(file) as json_file:
             content = json.load(json_file)
             for i, experiment in enumerate(content):
@@ -84,9 +90,3 @@ class Evaluator:
             writer.writerow(headers)
             for experiment in content:
                 writer.writerow([experiment[header] for header in headers])
-        test = ''
-
-
-
-
-

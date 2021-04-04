@@ -9,7 +9,6 @@ from sklearn.metrics import log_loss, f1_score, accuracy_score
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Dense, BatchNormalization, LeakyReLU, Dropout
 from tensorflow.keras.models import Sequential
-from tensorflow.python.data import Dataset
 from tensorflow.python.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.python.keras.engine import training
 
@@ -21,7 +20,11 @@ from matplotlib import pyplot as plt
 
 class BaseClassifier(abc.ABC):
     """"
-    Base class for classifiers
+    Base class for classifiers. Provides functionality that is used in all or some specific implementations
+    - Base network
+    - Loss and accuracy functions
+    - Data processing
+
     """
     # Log location for tensorboard
     logdir: str
@@ -34,17 +37,15 @@ class BaseClassifier(abc.ABC):
     callbacks: []
 
     # Data
-    x_train: pd.DataFrame
+    x_train: (pd.DataFrame, ndarray)
     y_train: pd.DataFrame
-    x_val: pd.DataFrame
+    x_val: (pd.DataFrame, ndarray)
     y_val: pd.DataFrame
-    x_test: pd.DataFrame
+    x_test: (pd.DataFrame, ndarray)
     y_test: pd.DataFrame
 
-    # Data iterators, used during training and evaluatrion
-    train_iter: Dataset
-    val_iter: Dataset
-    test_iter: Dataset
+    # If is not none, use these weights for weighted cross entropy loss
+    class_weights = None
 
     # Priors
     train_prior: ndarray = None
@@ -59,13 +60,14 @@ class BaseClassifier(abc.ABC):
 
     # If this value is not None, rebalance the train and validation set to this distribution, by down-sampling the majority classes
     # Format should be [percent_of_class1, percent_of_class2, ...], percentages in range (0,1)
-    rebalance_train_val: bool = False
+    rebalance_train_val: ndarray = None
 
     def __init__(self):
         """
         Add tensorflow callbacks
         - Tensorboard provides visualization during training
         - EarlyStopping ensures we don't train for too long, preventing overfitting
+        - Reduce lr on plateau reduces lr when loss is not decreasing anymore
         """
         self.logdir = f'./tensorboard/{datetime.now().strftime("%m-%d %H:%M")}'
         tensorboard = tf.keras.callbacks.TensorBoard(log_dir=self.logdir)
@@ -79,15 +81,17 @@ class BaseClassifier(abc.ABC):
         :param train:  The train data
         :param test:  The test data
         """
-        # If class count is 2, we sort ascending: priors are in form [class=0, class=1\
+        # If class count is 2, we sort ascending: priors are in form [class=0, class=1]
         # Else sort descending, such that we have [class=[1,0,0,0,..], class=[0,1,0,0,0...]]
         ascending = len(test.value_counts()) == 2
+
         train = train.value_counts().sort_index(ascending=ascending).array
         test = test.value_counts().sort_index(ascending=ascending).array
         train_sum = np.sum(train)
         test_sum = np.sum(test)
         self.train_prior = np.array([x / train_sum for x in train])
         self.test_prior = np.array([x / test_sum for x in test])
+
         if self.apply_bayes:
             print(f'Training prior is {self.train_prior}')
             print(f'Test prior is {self.test_prior}')
@@ -97,30 +101,28 @@ class BaseClassifier(abc.ABC):
         - Split data into train, val, test (70%, 20%, 10%)
         - Compute and save priors
         - Add the EvaluationCallback to this.callbacks.
-            This callback evaluates the test set after each epoch, and adds the current accuracy and loss to tensorboard.
-            The results are ofcourse not used for training, but rather to show progress on the test set during training
+            This callback evaluates the test set after each epoch, and adds the current accuracy loss and f1 to tensorboard.
+            The results are of course not used for training, but rather to show progress on the test set during training
         """
         # Split data
         x_train_val, self.x_test, y_train_val, self.y_test = train_test_split(x, y, test_size=0.1, random_state=1337)
+
         # Rebalance if desired
         if self.rebalance_test is not None:
             write_log(f'Rebalancing test set to {self.rebalance_test}')
             self.x_test, self.y_test = self.__rebalance(self.x_test, self.y_test, self.rebalance_test)
+
         # Compute priors
         self.compute_priors(y_train_val, self.y_test)
         # Add Evaluation callback
         self.callbacks.append(EvaluationCallback(self))
+
         # Split train_val into train and val
         self.x_train, self.x_val, self.y_train, self.y_val = train_test_split(x_train_val, y_train_val, test_size=.2 / 0.9, random_state=1338)
         if self.rebalance_train_val is not None:
             write_log(f'Rebalancing train and validation set to {self.rebalance_train_val}')
             self.x_train, self.y_train = self.__rebalance(self.x_train, self.y_train, self.rebalance_train_val)
             self.x_val, self.y_val = self.__rebalance(self.x_val, self.y_val, self.rebalance_train_val)
-
-        # Create iterators
-        self.train_iter = tf.data.Dataset.from_tensor_slices((self.x_train.values, self.y_train.values)).batch(self.batch_size).shuffle(self.x_train.shape[0])
-        self.val_iter = tf.data.Dataset.from_tensor_slices((self.x_val.values, self.y_val.values)).batch(self.batch_size)
-        self.test_iter = tf.data.Dataset.from_tensor_slices((self.x_test.values, self.y_test.values)).batch(self.batch_size)
 
     @staticmethod
     def __rebalance(x: pd.DataFrame, y: pd.DataFrame, target_distribution: []):
@@ -166,7 +168,7 @@ class BaseClassifier(abc.ABC):
         """
         weight_initializer = tf.keras.initializers.RandomNormal(mean=0.0, stddev=1)
         net = Sequential()
-        net.add(Dense(256, input_dim=164, kernel_initializer=weight_initializer))
+        net.add(Dense(256, input_dim=self.x_train.shape[1], kernel_initializer=weight_initializer))
         net.add(BatchNormalization())
         # net.add(Dropout(0.3))
         net.add(LeakyReLU())
@@ -225,17 +227,20 @@ class BaseClassifier(abc.ABC):
         """
         Train the network
         - Visualize result using tensorboard
-        - Use verbose output to show accuracy and loss during training
+        - Use verbose output to show accuracy, loss and f1 during training
         :return the trained network and the history
         """
         write_log('Loading data')
         self.load_data()
+
         net = self.compile_net()
         write_log('Training network')
 
         history = net.fit(
-            self.train_iter,
-            validation_data=self.val_iter,
+            self.x_train,
+            self.y_train,
+            batch_size=self.batch_size,
+            validation_data=(self.x_val, self.y_val),
             epochs=self.num_epochs,
             verbose=1,
             callbacks=self.callbacks,
@@ -245,6 +250,10 @@ class BaseClassifier(abc.ABC):
         return net, history
 
     def __show_history(self, history):
+        """
+        Plot accuracy per epoch using pyplot
+        @param history:
+        """
         plt.plot(history.history['accuracy'])
         plt.plot(history.history['val_accuracy'])
         plt.ylabel('Accuracy')
@@ -301,7 +310,7 @@ class BaseClassifier(abc.ABC):
 
     def test(self, net: training.Model, verbose=True):
         """
-        Test the network
+        Test the network, compute accuracy, loss, and f1
         :param net the trained network
         """
         # Get numpy data
@@ -323,6 +332,17 @@ class BaseClassifier(abc.ABC):
         if verbose:
             write_log(f'Test loss, f1, and accuracy are {loss}, {f1}, {accuracy}')
         return loss, f1, accuracy
+
+    def categorical_crossentropy(self):
+        """
+        Categorical cross entropy loss function. Use weighted version if self.class_weights is provided
+        @param self:
+        @return:
+        """
+        if self.class_weights is not None:
+            return self.weighted_categorical_crossentropy(self.class_weights)
+        else:
+            return tf.keras.losses.CategoricalCrossentropy()
 
     @staticmethod
     def f1(y_true, y_pred):
@@ -348,3 +368,30 @@ class BaseClassifier(abc.ABC):
         precision = precision(y_true, y_pred)
         recall = recall(y_true, y_pred)
         return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
+
+    @staticmethod
+    def weighted_categorical_crossentropy(weights):
+        """
+        https://gist.github.com/wassname/ce364fddfc8a025bfab4348cf5de852d
+        A weighted version of keras.objectives.categorical_crossentropy
+
+        Variables:
+            weights: numpy array of shape (C,) where C is the number of classes
+
+        Usage:
+            weights = np.array([0.5,2,10]) # Class one at 0.5, class 2 twice the normal weights, class 3 10x.
+            loss = weighted_categorical_crossentropy(weights)
+            model.compile(loss=loss,optimizer='adam')
+        """
+
+        weights = K.variable(weights)
+
+        def loss(y_true, y_pred):
+            # clip to prevent NaN's and Inf's
+            y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
+            # calc
+            loss = y_true * K.log(y_pred) * weights
+            loss = -K.sum(loss, -1)
+            return loss
+
+        return loss

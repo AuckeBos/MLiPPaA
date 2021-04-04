@@ -7,16 +7,16 @@ from DataLoader import DataLoader
 
 
 class BinaryClassifier(BaseClassifier):
+    """
+    Base model for binary classfication: htop vs background
+    """
 
-    def __init__(self):
-        super().__init__()
-        self.batch_size = 256
-        self.num_epochs = 50
+    batch_size = 256
+    num_epochs = 50
 
     def get_net(self):
         """
-        Get the network. Use a simple network that first expands and than shrinks the dimensionality.
-        Use Leaky relu activations, the final output is given by a sigmoid
+        Get the network. Use bas network and append Dense(1) with sigmoid
         """
         net = super().get_net()
         net.add(Dense(1, activation='sigmoid'))
