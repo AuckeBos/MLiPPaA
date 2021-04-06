@@ -1,21 +1,19 @@
 import abc
 from datetime import datetime
-
 import numpy as np
 import pandas as pd
 import tensorflow.keras.backend as K
+from matplotlib import pyplot as plt
 from numpy import ndarray
 from sklearn.metrics import log_loss, f1_score, accuracy_score
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Dense, BatchNormalization, LeakyReLU, Dropout
 from tensorflow.keras.models import Sequential
-from tensorflow.python.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.python.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 from tensorflow.python.keras.engine import training
-
 import tensorflow as tf
 from EvaluationCallback import EvaluationCallback
 from helpers import write_log
-from matplotlib import pyplot as plt
 
 
 class BaseClassifier(abc.ABC):
@@ -62,6 +60,9 @@ class BaseClassifier(abc.ABC):
     # Format should be [percent_of_class1, percent_of_class2, ...], percentages in range (0,1)
     rebalance_train_val: ndarray = None
 
+    # Save the best performing model to a file with this name
+    save_to: str = None
+
     def __init__(self):
         """
         Add tensorflow callbacks
@@ -71,7 +72,7 @@ class BaseClassifier(abc.ABC):
         """
         self.logdir = f'./tensorboard/{datetime.now().strftime("%m-%d %H:%M")}'
         tensorboard = tf.keras.callbacks.TensorBoard(log_dir=self.logdir)
-        es = EarlyStopping(patience=8, verbose=1)
+        es = EarlyStopping(patience=10, verbose=1)
         reduce_lr_on_plateau = ReduceLROnPlateau(factor=.4, patience=3, verbose=1)
         self.callbacks = [tensorboard, es, reduce_lr_on_plateau]
 
@@ -170,26 +171,16 @@ class BaseClassifier(abc.ABC):
         net = Sequential()
         net.add(Dense(256, input_dim=self.x_train.shape[1], kernel_initializer=weight_initializer))
         net.add(BatchNormalization())
-        # net.add(Dropout(0.3))
         net.add(LeakyReLU())
         net.add(Dense(512))
         net.add(Dropout(0.3))
         net.add(BatchNormalization())
         net.add(LeakyReLU())
-        # net.add(Dense(1024))
-        # net.add(Dropout(0.2))
-        # net.add(BatchNormalization())
-        # net.add(LeakyReLU())
-        # net.add(Dense(512))
-        # net.add(Dropout(0.2))
-        # net.add(BatchNormalization())
-        # net.add(LeakyReLU())
         net.add(Dense(256))
         net.add(BatchNormalization())
         net.add(Dropout(0.3))
         net.add(LeakyReLU())
         net.add(Dense(128))
-        # net.add(Dropout(0.4))
         net.add(BatchNormalization())
         net.add(LeakyReLU())
         net.add(Dense(64))
@@ -197,7 +188,6 @@ class BaseClassifier(abc.ABC):
         net.add(Dropout(0.4))
         net.add(LeakyReLU())
         net.add(Dense(32))
-        # net.add(Dropout(0.3))
         net.add(BatchNormalization())
         net.add(LeakyReLU())
         net.add(Dense(16))
@@ -232,9 +222,12 @@ class BaseClassifier(abc.ABC):
         """
         write_log('Loading data')
         self.load_data()
-
-        net = self.compile_net()
+        write_log('Data loaded')
         write_log('Training network')
+        net = self.compile_net()
+
+        if self.save_to is not None:
+            self.callbacks.append(ModelCheckpoint(self.save_to, save_best_only=True))
 
         history = net.fit(
             self.x_train,
@@ -245,7 +238,7 @@ class BaseClassifier(abc.ABC):
             verbose=1,
             callbacks=self.callbacks,
         )
-        write_log('Training finished')
+        write_log('Network trained')
         # self.__show_history(history)
         return net, history
 
@@ -271,42 +264,6 @@ class BaseClassifier(abc.ABC):
         train_prior = np.array(self.train_prior)
         posterior = np.array([test_prior * y / train_prior for y in y_pred])
         return posterior
-
-    def test_binary(self, net: training.Model, verbose=True):
-        """
-        Test the networks performance on binary classification
-        :param net the trained network
-        """
-        # Labels to binary
-        if isinstance(self.y_test, pd.DataFrame):
-            y_true = self.y_test['4top'].to_numpy()
-        else:
-            y_true = self.y_test.to_numpy()
-
-        y_pred = net.predict(self.x_test)
-        # Convert single value probs to 2 value probs
-        if y_pred.shape[1] == 1:
-            y_pred = np.array([[y[0], 1 - y[0]] for y in y_pred])
-        # Apply bayes
-        if self.apply_bayes:
-            y_pred = self._apply_bayes(y_pred)
-
-        # Select the class with the highest probability
-        classes = np.argmax(y_pred, axis=1)
-        # Convert to binary
-        y_pred = [int(y == 0) for y in classes]
-
-        pred_true = sum(y_pred)
-        pred_false = len(y_pred) - pred_true
-        write_log(f'Num predicted true: {pred_true}\n')
-        write_log(f'Num predicted false: {pred_false}\n')
-
-        loss = log_loss(y_true, y_pred)
-        f1 = f1_score(y_true, y_pred, average='macro')
-        accuracy = accuracy_score(y_true, y_pred)
-        if verbose:
-            write_log(f'Test loss, f1, and accuracy are {loss}, {f1}, {accuracy}')
-        return loss, f1, accuracy
 
     def test(self, net: training.Model, verbose=True):
         """
@@ -348,9 +305,10 @@ class BaseClassifier(abc.ABC):
     def f1(y_true, y_pred):
         """
         F1 loss function
-        @param y_true:
-        @param y_pred:
-        @return:
+        https://datascience.stackexchange.com/questions/45165/how-to-get-accuracy-f1-precision-and-recall-for-a-keras-model
+        @param y_true: Labels
+        @param y_pred: Predictions
+        @return: F1
         """
 
         def recall(y_true, y_pred):
@@ -377,11 +335,6 @@ class BaseClassifier(abc.ABC):
 
         Variables:
             weights: numpy array of shape (C,) where C is the number of classes
-
-        Usage:
-            weights = np.array([0.5,2,10]) # Class one at 0.5, class 2 twice the normal weights, class 3 10x.
-            loss = weighted_categorical_crossentropy(weights)
-            model.compile(loss=loss,optimizer='adam')
         """
 
         weights = K.variable(weights)

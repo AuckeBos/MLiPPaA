@@ -5,3 +5,5 @@ tensorboard
 tensorflow
 exam.egg-info
 data
+Evaluations
+__pycache__

@@ -22,7 +22,9 @@ class EvaluationCallback(tf.keras.callbacks.Callback):
         :param epoch:
         :param logs:
         """
+        # Test performance
         loss, f1, accuracy = self.classifier.test(self.model, False)
+        # Save to logs and tensorboard
         tf.summary.create_file_writer(f'{self.log_dir}/test').set_as_default()
         logs['test_loss'] = loss
         logs['test_f1'] = f1
