@@ -7,3 +7,4 @@ exam.egg-info
 data
 Evaluations
 __pycache__
+*.csv

@@ -3,9 +3,9 @@ from tensorflow.keras.layers import Input
 from tensorflow.keras.layers import Softmax
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
-from BaseClassification import BaseClassifier
-from DataLoader import DataLoader
-from helpers import to_ndarray
+from Element2.BaseClassification import BaseClassifier
+from Element2.DataLoader import DataLoader
+from Element2.helpers import to_ndarray
 
 
 class RecurrentClassifier(BaseClassifier):
@@ -61,19 +61,32 @@ class RecurrentClassifier(BaseClassifier):
 
         return net
 
-    def load_data(self):
+    def load_data(self, data_file: str = None):
         """
         Load the data using the dataloader
         """
         data_loader = DataLoader()
         data_loader.variable_input_length = True
-        x, y = data_loader.load_data()
+        x, y = data_loader.load_data(data_file)
+        # Save one-hot to string mapping
+        self.predictions_to_labels = data_loader.predictions_to_labels
         self.split(x, y)
 
         # Now convert the training sets such that they consist of two inputs of size (#Points, 3) and (#Points, 1)
-        self.x_train = [self.x_train[self.event_level_columns], to_ndarray(self.x_train[self.vector_column].values)]
-        self.x_val = [self.x_val[self.event_level_columns], to_ndarray(self.x_val[self.vector_column].values)]
-        self.x_test = [self.x_test[self.event_level_columns], to_ndarray(self.x_test[self.vector_column].values)]
+        self.x_train = self.restructure_input(self.x_train)
+        self.x_val = self.restructure_input(self.x_val)
+        self.x_test = self.restructure_input(self.x_test)
+
+        # Return complete unsplitted set
+        return self.restructure_input(x), y
+
+    def restructure_input(self, x):
+        """
+        The nwtork requires a restructure of the traning data such that they consist of two inputs of size (#Points, 3) and (#Points, 1). Do so here
+        @param x:  The original data
+        @return:  The restructured data
+        """
+        return [x[self.event_level_columns], to_ndarray(x[self.vector_column].values)]
 
     def compile_net(self):
         """

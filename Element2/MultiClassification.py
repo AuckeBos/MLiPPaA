@@ -4,9 +4,9 @@ from tensorflow.keras.layers import Dense, Softmax
 from tensorflow.keras.optimizers import Adam
 from tensorflow.python.keras.engine import training
 
-from BaseClassification import BaseClassifier
-from DataLoader import DataLoader
-from helpers import write_log
+from Element2.BaseClassification import BaseClassifier
+from Element2.DataLoader import DataLoader
+from Element2.helpers import write_log
 
 
 class MultiClassifier(BaseClassifier):
@@ -25,13 +25,19 @@ class MultiClassifier(BaseClassifier):
         net.add(Softmax())
         return net
 
-    def load_data(self):
+    def load_data(self, data_file: str = None):
         """
         Load the data using the dataloader
         """
         data_loader = DataLoader()
-        x, y = data_loader.load_data()
+        x, y = data_loader.load_data(data_file)
+        # Save one-hot to string mapping
+        self.predictions_to_labels = data_loader.predictions_to_labels
         self.split(x, y)
+
+        # Return complete unsplitted set
+        return x, y
+
 
     def compile_net(self):
         """
@@ -40,7 +46,7 @@ class MultiClassifier(BaseClassifier):
         """
         optimizer = Adam(learning_rate=.0001)
         net = self.get_net()
-        net.compile(loss=self.categorical_crossentropy(), optimizer=optimizer, metrics=['accuracy', self.f1])
+        net.compile(loss=self.loss(), optimizer=optimizer, metrics=['accuracy', self.f1])
         return net
 
     def test_binary(self, net: training.Model, verbose=True):

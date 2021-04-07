@@ -2,11 +2,11 @@ import csv
 import itertools
 import json
 from tensorflow.keras.models import load_model
-from BaseClassification import BaseClassifier
-from BinaryClassification import BinaryClassifier
-from MultiClassification import MultiClassifier
-from RecurrentClassification import RecurrentClassifier
-from helpers import write_log
+from Element2.BaseClassification import BaseClassifier
+from Element2.BinaryClassification import BinaryClassifier
+from Element2.MultiClassification import MultiClassifier
+from Element2.RecurrentClassification import RecurrentClassifier
+from Element2.helpers import write_log
 
 
 class Evaluator:
@@ -122,7 +122,7 @@ class Evaluator:
         @param dir_binary_classifier: Dir where the binary classifier models are saved
         @param dir_multi_classifier: Dir where the multi classifier models are saved
         """
-
+        rebalanced_distribution = [1 - 0.04, 0.04]
         # Get the sets
         classifier = BinaryClassifier()
         classifier.load_data()
@@ -140,17 +140,22 @@ class Evaluator:
         comparison = []
         binary_classifier = BinaryClassifier()
         multi_classifier = MultiClassifier()
-        for i, (_, _, _, _) in enumerate(list(itertools.product(apply_bayes_options, rebalance_testset_options, rebalance_trainvalidation_options, weighted_loss_options))):
+        for i, (apply_bayes, _, _, _) in enumerate(list(itertools.product(apply_bayes_options, rebalance_testset_options, rebalance_trainvalidation_options, weighted_loss_options))):
             # For each configuration, test both networks on both sets
             current_evaluation = {}
-            binary_net = load_model(f'{dir_binary_classifier}/{i}', custom_objects={'f1': BaseClassifier.f1, 'loss': binary_classifier.binary_crossentropy()})
-            multi_net = load_model(f'{dir_multi_classifier}/{i}', custom_objects={'f1': BaseClassifier.f1, 'loss': multi_classifier.categorical_crossentropy()})
+            binary_net = load_model(f'{dir_binary_classifier}/{i}', custom_objects={'f1': BaseClassifier.f1, 'loss': binary_classifier.loss()})
+            multi_net = load_model(f'{dir_multi_classifier}/{i}', custom_objects={'f1': BaseClassifier.f1, 'loss': multi_classifier.loss()})
 
             # Evaluate the not rebalanced set
             binary_classifier.x_test = x_not_rebalanced
             binary_classifier.y_test = y_not_rebalanced
+            if apply_bayes:
+                binary_classifier.apply_bayes = apply_bayes
+                binary_classifier
+
             multi_classifier.x_test = x_not_rebalanced
             multi_classifier.y_test = y_not_rebalanced
+
             binary_loss, binary_f1, binary_accuracy = binary_classifier.test(binary_net, False)
             multi_loss, multi_f1, multi_accuracy = multi_classifier.test_binary(multi_net, False)
             current_evaluation['not_rebalanced'] = {
@@ -233,3 +238,46 @@ class Evaluator:
             writer.writerow(headers)
             for experiment in comparison:
                 writer.writerow([experiment[header] for header in headers])
+
+    @staticmethod
+    def save_models_as_h5(binary_dir: str, multi_dir: str, recurrent_dir: str):
+        """
+        Note:
+        Assumes we have ran Assignments b, c, and d, with the last line commented out, such that they will save the best models
+
+        Save three h5 files: one for each classifier. To save them, we load the best performing model as created by Evaluator.compare_design_choices.
+        To select the best performing models, we select the best scores from Tables I-III in our paper.
+        - Select models where Rebalance test = true, since the final test set will probably be balanced in such a way as well
+        - Select model based on high test F1 score
+        - File locations are based on the ordering of this table: 16 configurations in dirs 0-15 in a specific sub directory
+
+        Chosen models:
+        - Binary classifier:
+            Best F1 score with RebalanceTrainVal=True, WeightedLoss=False
+            Configuration index 5 in Table III
+        - Multi classifier:
+            Best F1 score with RebalanceTest=True gives config with ApplyBayes=True, RebalanceTest=True, RebalanceTrainVal=False, WeightedLoss=False
+            Configuration index 3 in Table I
+        - Recurrent classifier:
+            Best F1 score with RebalanceTest=True gives config with ApplyBayes=True, RebalanceTest=True, RebalanceTrainVal=False, WeightedLoss=False
+            Configuration index 3 in Table II
+        @return:
+        """
+
+        binary_classifier_dir = f'{binary_dir}/5'
+        multi_classifier_dir = f'{multi_dir}/3'
+        recurrent_classifier_dir = f'{recurrent_dir}/3'
+
+        binary_classifier = BinaryClassifier()
+        multi_classifier = MultiClassifier()
+        recurrent_classifier = RecurrentClassifier()
+
+        binary_net = load_model(binary_classifier_dir, custom_objects={'f1': BaseClassifier.f1, 'loss': binary_classifier.loss()})
+        multi_net = load_model(multi_classifier_dir, custom_objects={'f1': BaseClassifier.f1, 'loss': multi_classifier.loss()})
+        recurrent_net = load_model(recurrent_classifier_dir, custom_objects={'f1': BaseClassifier.f1, 'loss': recurrent_classifier.loss()})
+
+        binary_net.save('best_binary_classifier.h5')
+        multi_net.save('best_multiclass_classifier.h5')
+        recurrent_net.save('best_recurrent_classifier.h5')
+
+        write_log('Saved best models')

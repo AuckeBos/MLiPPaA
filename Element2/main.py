@@ -3,6 +3,9 @@ from Evaluator import Evaluator
 from MultiClassification import MultiClassifier
 from RecurrentClassification import RecurrentClassifier
 
+evaluation_dir_binary_classifier = 'Evaluations/BinaryClassifierEvaluation'
+evaluation_dir_multi_classifier = 'Evaluations/MultiClassifierEvaluation'
+evaluation_dir_recurrent_classifier = 'Evaluations/RecurrentClassifierEvaluation'
 
 def assignment_a():
     """
@@ -15,7 +18,7 @@ def assignment_a():
     classifier.rebalance_test = [1 - 0.04, 0.04]
     classifier.rebalance_train_val = None
     Evaluator.evaluate(classifier)
-    # Evaluator.compare_design_choices('binary', './Evaluations/BinaryClassifierEvaluation')
+    # Evaluator.compare_design_choices('binary', evaluation_dir_binary_classifier)
 
 
 def assignment_b():
@@ -29,7 +32,7 @@ def assignment_b():
     classifier.rebalance_test = [0.04] + ([(1 - 0.04) / 4] * 4)
     classifier.rebalance_train_val = None
     Evaluator.evaluate(classifier)
-    # Evaluator.compare_design_choices('multi', './Evaluations/MultiClassifierEvaluation')
+    # Evaluator.compare_design_choices('multi', evaluation_dir_multi_classifier)
 
 
 def assignment_c():
@@ -39,9 +42,9 @@ def assignment_c():
     Compare both classifiers by fully training them on all configurations. Then generate a json with a binary comparison, and convert it to a csv with the
     relevant testing data
     """
-    Evaluator.compare_design_choices('multi', './Evaluations/MultiClassifierEvaluation')
-    Evaluator.compare_design_choices('binary', './Evaluations/BinaryClassifierEvaluation')
-    Evaluator.compare_binary_performance('./Evaluations/BinaryClassifierEvaluation', './Evaluations/MultiClassifierEvaluation')
+    Evaluator.compare_design_choices('multi', evaluation_dir_multi_classifier)
+    Evaluator.compare_design_choices('binary', evaluation_dir_binary_classifier)
+    Evaluator.compare_binary_performance(evaluation_dir_binary_classifier, evaluation_dir_multi_classifier)
     Evaluator.binary_comparison_to_csv('./binary_comparison.json')
 
 
@@ -57,10 +60,10 @@ def assignment_d():
     classifier.rebalance_test = [0.04] + ([(1 - 0.04) / 4] * 4)
     classifier.rebalance_train_val = None
     Evaluator.evaluate(classifier)
-    # Evaluator.compare_design_choices('recurrent', './Evaluations/RecurrentClassifierEvaluation')
+    # Evaluator.compare_design_choices('recurrent', evaluation_dir_recurrent_classifier)
 
 # Uncomment to run one of the above functions
 # assignment_a()
-# assignment_b()
+assignment_b()
 # assignment_c()
 # assignment_d()

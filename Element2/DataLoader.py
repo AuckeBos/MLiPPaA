@@ -61,6 +61,9 @@ class DataLoader:
     # If we have variable input length, we pad with '-100'
     padding_mask = -100
 
+    # Used to map predictions \in [0,5] back to string labels. Is a simple array of length 5 that maps index to string
+    predictions_to_labels:  List[str] = None
+
     def set_binary_classification(self):
         """
         Set DataLoader to use binary classification, this alters the value of 'y' into binary labels
@@ -142,11 +145,13 @@ class DataLoader:
         # Return binary labels
         if self.classification_type == 'binary':
             labels = df[self.label_column].map(lambda process: 1 if process == '4top' else 0)
+            self.predictions_to_labels = ['background', '4top']
         # Return one hot encoded labels
         elif self.classification_type == 'multi':
             labels = df[self.label_column]
             # One hot encoding
             labels = pd.get_dummies(labels)
+            self.predictions_to_labels = labels.columns.tolist()
         else:
             raise Exception(f'Invalid classification type {self.classification_type}')
         self.y = labels
@@ -162,16 +167,22 @@ class DataLoader:
         df = pd.DataFrame(scaled, columns=column_names_to_normalize, index=self.x.index)
         self.x[column_names_to_normalize] = df
 
-    def load_data(self):
+    def load_data(self, data_file=None, has_labels=True):
         """
         Load the data from csv
-        :return: self.x and self.y
+
+        @param data_file: If provided, use this file to load data from. If not provided, use self.data_file
+        @param has_labels: If true, assume the data contains labels. In this case we will load self.y too, and exclude the label column in self.x
+        @return: self.x, self.y. self.y is None if has_labels=False
         """
+        if data_file is None:
+            data_file = self.data_file
+
         # Add columns for 4-vectors
         object_columns = np.array([f'Object{i}' for i in range(1, 25)])
         all_columns = np.concatenate((self.event_columns, object_columns.flatten()))
         # Note: 4-vector data is ',' separated, thus each vector is saved as string in 1 column
-        data = pd.read_csv(self.data_file, names=all_columns, sep=';')
+        data = pd.read_csv(data_file, names=all_columns, sep=';')
         # Created 25 object columns, might be too many. Drop columns with ALL NaNs
         data.dropna(axis=1, how='all', inplace=True)
 
@@ -179,7 +190,10 @@ class DataLoader:
         max_nr_of_vectors = len([col for col in data if col.startswith('Object')])
         data['VectorCount'] = max_nr_of_vectors - data.isnull().sum(axis=1)
         # Drop columns that we do not want to train on
-        self.x = data.drop(columns=['EventID', 'ProcessID', 'EventWeight'])
+        self.x = data.drop(columns=['EventID', 'EventWeight'])
+        # If labels are provided, drop them from training
+        if has_labels:
+            self.x.drop(columns=[self.label_column], inplace=True)
 
         self.__explode_4_vectors()
 
@@ -188,6 +202,6 @@ class DataLoader:
         # If we must normalize, do so
         if self.normalize_data:
             self.__normalize_data()
-
-        self.__load_labels(data)
+        if has_labels:
+            self.__load_labels(data)
         return self.x, self.y

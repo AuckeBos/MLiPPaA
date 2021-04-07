@@ -4,9 +4,9 @@ from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import Adam
 from tensorflow.python.keras.engine import training
 import tensorflow as tf
-from BaseClassification import BaseClassifier
-from DataLoader import DataLoader
-from helpers import write_log
+from Element2.BaseClassification import BaseClassifier
+from Element2.DataLoader import DataLoader
+from Element2.helpers import write_log
 
 
 class BinaryClassifier(BaseClassifier):
@@ -49,14 +49,18 @@ class BinaryClassifier(BaseClassifier):
         net.add(Dense(1, activation='sigmoid'))
         return net
 
-    def load_data(self):
+    def load_data(self, data_file: str = None):
         """
         Load the data using the dataloader
         """
         data_loader = DataLoader()
         data_loader.set_binary_classification()
-        x, y = data_loader.load_data()
+        x, y = data_loader.load_data(data_file)
+
         self.split(x, y)
+
+        # Return complete unsplitted set
+        return x, y
 
     def compile_net(self):
         """
@@ -65,10 +69,10 @@ class BinaryClassifier(BaseClassifier):
         """
         optimizer = Adam(learning_rate=.0001)
         net = self.get_net()
-        net.compile(loss=self.binary_crossentropy(), optimizer=optimizer, metrics=['accuracy', self.f1])
+        net.compile(loss=self.loss(), optimizer=optimizer, metrics=['accuracy', self.f1])
         return net
 
-    def binary_crossentropy(self):
+    def loss(self):
         """
         loss function. Use weighted categorical crossentropy if self.class_weights is provided, else normal binary crossentropy
         @return: The loss

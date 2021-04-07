@@ -12,8 +12,9 @@ from tensorflow.keras.models import Sequential
 from tensorflow.python.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 from tensorflow.python.keras.engine import training
 import tensorflow as tf
-from EvaluationCallback import EvaluationCallback
-from helpers import write_log
+from Element2.EvaluationCallback import EvaluationCallback
+from Element2.helpers import write_log
+from typing import List
 
 
 class BaseClassifier(abc.ABC):
@@ -62,6 +63,9 @@ class BaseClassifier(abc.ABC):
 
     # Save the best performing model to a file with this name
     save_to: str = None
+
+    # Used to map predictions \in [0,5] back to string labels. Is a simple array that maps index to string
+    predictions_to_labels:  List[str] = None
 
     def __init__(self):
         """
@@ -200,9 +204,10 @@ class BaseClassifier(abc.ABC):
         return net
 
     @abc.abstractmethod
-    def load_data(self):
+    def load_data(self, data_file: str = None):
         """
         Load the data using the dataloader
+        :param data_file if provided, use this file to load from. Else default value of DataLoader.data_file
         """
         pass
 
@@ -222,6 +227,7 @@ class BaseClassifier(abc.ABC):
         """
         write_log('Loading data')
         self.load_data()
+        self.predictions_to_labels
         write_log('Data loaded')
         write_log('Training network')
         net = self.compile_net()
@@ -290,7 +296,7 @@ class BaseClassifier(abc.ABC):
             write_log(f'Test loss, f1, and accuracy are {loss}, {f1}, {accuracy}')
         return loss, f1, accuracy
 
-    def categorical_crossentropy(self):
+    def loss(self):
         """
         Categorical cross entropy loss function. Use weighted version if self.class_weights is provided
         @param self:
@@ -348,3 +354,16 @@ class BaseClassifier(abc.ABC):
             return loss
 
         return loss
+
+    def predict(self, net, x):
+        """
+        Create predictions for a set
+        @param net: The network to predict with
+        @param x: The data to predict
+        @return:
+        """
+        predictions = net.predict(x)
+        classes = np.argmax(predictions, axis=1)
+        if self.predictions_to_labels is not None:
+            classes = [self.predictions_to_labels[c] for c in classes]
+        return classes
