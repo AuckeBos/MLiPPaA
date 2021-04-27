@@ -64,6 +64,6 @@ def assignment_d():
 
 # Uncomment to run one of the above functions
 # assignment_a()
-assignment_b()
+# assignment_b()
 # assignment_c()
 # assignment_d()

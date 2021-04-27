@@ -25,15 +25,17 @@ class MultiClassifier(BaseClassifier):
         net.add(Softmax())
         return net
 
-    def load_data(self, data_file: str = None):
+    def load_data(self, data_file: str = None, has_labels: bool = True, objects_per_row: int = None):
         """
-        Load the data using the dataloader
+        Inherit doc
         """
         data_loader = DataLoader()
-        x, y = data_loader.load_data(data_file)
-        # Save one-hot to string mapping
-        self.predictions_to_labels = data_loader.predictions_to_labels
-        self.split(x, y)
+        x, y = data_loader.load_data(data_file, has_labels, objects_per_row)
+        # If we have labels (eg no testset), save labels and split into train/val/test
+        if has_labels:
+            # Save one-hot to string mapping
+            self.predictions_to_labels = data_loader.predictions_to_labels
+            self.split(x, y)
 
         # Return complete unsplitted set
         return x, y

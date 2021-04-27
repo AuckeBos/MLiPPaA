@@ -61,28 +61,30 @@ class RecurrentClassifier(BaseClassifier):
 
         return net
 
-    def load_data(self, data_file: str = None):
+    def load_data(self, data_file: str = None, has_labels: bool = True, objects_per_row: int = None):
         """
-        Load the data using the dataloader
+        Inherit doc
         """
         data_loader = DataLoader()
         data_loader.variable_input_length = True
-        x, y = data_loader.load_data(data_file)
-        # Save one-hot to string mapping
-        self.predictions_to_labels = data_loader.predictions_to_labels
-        self.split(x, y)
+        x, y = data_loader.load_data(data_file, has_labels, objects_per_row)
+        # If we have labels, save the one-hot encodings, split into train/val/test, and restructure input
+        if has_labels:
+            # Save one-hot to string mapping
+            self.predictions_to_labels = data_loader.predictions_to_labels
+            self.split(x, y)
 
-        # Now convert the training sets such that they consist of two inputs of size (#Points, 3) and (#Points, 1)
-        self.x_train = self.restructure_input(self.x_train)
-        self.x_val = self.restructure_input(self.x_val)
-        self.x_test = self.restructure_input(self.x_test)
+            # Now convert the training sets such that they consist of two inputs of size (#Points, 3) and (#Points, 1)
+            self.x_train = self.restructure_input(self.x_train)
+            self.x_val = self.restructure_input(self.x_val)
+            self.x_test = self.restructure_input(self.x_test)
 
         # Return complete unsplitted set
         return self.restructure_input(x), y
 
     def restructure_input(self, x):
         """
-        The nwtork requires a restructure of the traning data such that they consist of two inputs of size (#Points, 3) and (#Points, 1). Do so here
+        The network requires a restructure of the traning data such that they consist of two inputs of size (#Points, 3) and (#Points, 1). Do so here
         @param x:  The original data
         @return:  The restructured data
         """
@@ -95,5 +97,5 @@ class RecurrentClassifier(BaseClassifier):
         """
         optimizer = Adam(learning_rate=.0001)
         net = self.get_net()
-        net.compile(loss=self.categorical_crossentropy(), optimizer=optimizer, metrics=['accuracy', self.f1])
+        net.compile(loss=self.loss(), optimizer=optimizer, metrics=['accuracy', self.f1])
         return net

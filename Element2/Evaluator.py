@@ -25,6 +25,22 @@ class Evaluator:
         return net
 
     @staticmethod
+    def parse_classifier_type(classifier_type: str):
+        """
+        Parse classifier string type: binary, multi, or recurrent
+        @param classifier_type:
+        @return: The classifier
+        """
+        if classifier_type == 'binary':
+            return BinaryClassifier()
+        elif classifier_type == 'multi':
+            return MultiClassifier()
+        elif classifier_type == 'recurrent':
+            return RecurrentClassifier()
+        else:
+            raise Exception('No classifier exists for ' + classifier_type)
+
+    @staticmethod
     def compare_design_choices(classifier_type: str, dir: str):
         """
         Compare a combination of 16 different design choices. Save training history in json format
@@ -46,15 +62,8 @@ class Evaluator:
         weighted_loss_options = [True, False]
         comparison = []
         for i, (apply_bayes, rebalance_test, rebalance_trainval, weighted_loss) in enumerate(list(itertools.product(apply_bayes_options, rebalance_testset_options, rebalance_trainvalidation_options, weighted_loss_options))):
+            classifier = Evaluator.parse_classifier_type(classifier_type)
             # For each configuration, train a model, save its best performing instance
-            if classifier_type == 'binary':
-                classifier = BinaryClassifier()
-            elif classifier_type == 'multi':
-                classifier = MultiClassifier()
-            elif classifier_type == 'recurrent':
-                classifier = RecurrentClassifier()
-            else:
-                raise Exception('No classifier exists for ' + classifier_type)
 
             classifier.save_to = f'{dir}/{i}/'
             classifier.apply_bayes = apply_bayes
@@ -151,7 +160,6 @@ class Evaluator:
             binary_classifier.y_test = y_not_rebalanced
             if apply_bayes:
                 binary_classifier.apply_bayes = apply_bayes
-                binary_classifier
 
             multi_classifier.x_test = x_not_rebalanced
             multi_classifier.y_test = y_not_rebalanced

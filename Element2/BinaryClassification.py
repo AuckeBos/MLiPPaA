@@ -49,15 +49,18 @@ class BinaryClassifier(BaseClassifier):
         net.add(Dense(1, activation='sigmoid'))
         return net
 
-    def load_data(self, data_file: str = None):
+    def load_data(self, data_file: str = None, has_labels: bool = True, objects_per_row: int = None):
         """
-        Load the data using the dataloader
+        Inherit doc
         """
         data_loader = DataLoader()
         data_loader.set_binary_classification()
-        x, y = data_loader.load_data(data_file)
-
-        self.split(x, y)
+        x, y = data_loader.load_data(data_file, has_labels, objects_per_row)
+        # If we have labels (eg no testset), save labels and split into train/val/test
+        if has_labels:
+            # Save one-hot to string mapping
+            self.predictions_to_labels = data_loader.predictions_to_labels
+            self.split(x, y)
 
         # Return complete unsplitted set
         return x, y
@@ -81,3 +84,24 @@ class BinaryClassifier(BaseClassifier):
             return self.weighted_categorical_crossentropy(self.class_weights)
         else:
             return tf.keras.losses.BinaryCrossentropy()
+
+    def predict(self, net, x):
+        """
+        Create predictions for a set
+        @param net: The network to predict with
+        @param x: The data to predict
+        @return: array of predictions.
+        """
+        predictions = net.predict(x)
+
+        # Binary to two-class
+        predictions = np.array([[1 - y[0], y[0]] for y in predictions])
+        # Apply bayes
+        if self.apply_bayes:
+            predictions = self._apply_bayes(predictions)
+            predictions = [p / sum(p) for p in predictions]
+
+        # Convert back to binary: The prediction is the probability of y=1
+        predictions = np.array([[y[1]] for y in predictions])
+
+        return predictions

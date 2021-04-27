@@ -70,8 +70,7 @@ class DataLoader:
         """
         self.classification_type = 'binary'
 
-    @staticmethod
-    def __4_vector_to_array(string):
+    def __4_vector_to_array(self, string):
         """
         The 4-vectors are initially loaded as string. In this function:
         - Split the string into an array
@@ -79,9 +78,9 @@ class DataLoader:
         :param string: The 4-vector as string
         :return: The 4-vector as array
         """
-        # Return empty array for the NaN values, this is the zero padding
+        # Return array of nans for the NaN values, will be used for zero-padding later on
         if type(string) == float:
-            return []
+            return [np.nan] * len(self.object_columns)
 
         splitted = str(string).split(',')
         particle = splitted[0]
@@ -167,33 +166,37 @@ class DataLoader:
         df = pd.DataFrame(scaled, columns=column_names_to_normalize, index=self.x.index)
         self.x[column_names_to_normalize] = df
 
-    def load_data(self, data_file=None, has_labels=True):
+    def load_data(self, data_file=None, has_labels=True, objects_per_row: int = None):
         """
         Load the data from csv
 
         @param data_file: If provided, use this file to load data from. If not provided, use self.data_file
-        @param has_labels: If true, assume the data contains labels. In this case we will load self.y too, and exclude the label column in self.x
+        @param has_labels: If true, assume the data contains labels. In this case we will load self.y too
+        @param objects_per_row: The number of object columns to use per row.
+            This value should usually not be provided, since we will define the number of columns depending on the data
+            In case we want to be sure of the exact number of features per row, we should provide this value.
+                Note that some columns may contain NANs in all rows. Only usefull if we are loading a previously trained model
+                on a new test set. In that case the model must have the exact same input size. Used in read_and_run.py
         @return: self.x, self.y. self.y is None if has_labels=False
         """
         if data_file is None:
             data_file = self.data_file
 
+        object_col_count = objects_per_row if objects_per_row is not None else 24
         # Add columns for 4-vectors
-        object_columns = np.array([f'Object{i}' for i in range(1, 25)])
+        object_columns = np.array([f'Object{i}' for i in range(1, object_col_count + 1)])
         all_columns = np.concatenate((self.event_columns, object_columns.flatten()))
         # Note: 4-vector data is ',' separated, thus each vector is saved as string in 1 column
         data = pd.read_csv(data_file, names=all_columns, sep=';')
-        # Created 25 object columns, might be too many. Drop columns with ALL NaNs
-        data.dropna(axis=1, how='all', inplace=True)
+        # If the objects_per_row was not provided, we simply created 24 cols. This might be too many. Thus drop the columns where all rows have NAN
+        if objects_per_row is None:
+            data.dropna(axis=1, how='all', inplace=True)
 
         # Add column that holds the amount of non-null vectors
         max_nr_of_vectors = len([col for col in data if col.startswith('Object')])
         data['VectorCount'] = max_nr_of_vectors - data.isnull().sum(axis=1)
         # Drop columns that we do not want to train on
-        self.x = data.drop(columns=['EventID', 'EventWeight'])
-        # If labels are provided, drop them from training
-        if has_labels:
-            self.x.drop(columns=[self.label_column], inplace=True)
+        self.x = data.drop(columns=['EventID', 'EventWeight', self.label_column])
 
         self.__explode_4_vectors()
 

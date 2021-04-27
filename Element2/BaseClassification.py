@@ -65,7 +65,7 @@ class BaseClassifier(abc.ABC):
     save_to: str = None
 
     # Used to map predictions \in [0,5] back to string labels. Is a simple array that maps index to string
-    predictions_to_labels:  List[str] = None
+    predictions_to_labels: List[str] = None
 
     def __init__(self):
         """
@@ -204,10 +204,17 @@ class BaseClassifier(abc.ABC):
         return net
 
     @abc.abstractmethod
-    def load_data(self, data_file: str = None):
+    def load_data(self, data_file: str = None, has_labels: bool = True, objects_per_row: int = None):
         """
         Load the data using the dataloader
-        :param data_file if provided, use this file to load from. Else default value of DataLoader.data_file
+        @param data_file: The file to load the data from. If not provided, use default file in DataLoader
+        @param has_labels: Should be False only when we are loading a 'testset' without labels. In that case: Don't load the labels, and don't split data
+        @param objects_per_row: The number of object columns to use per row.
+            This value should usually not be provided, since we will define the number of columns depending on the data
+            In case we want to be sure of the exact number of features per row, we should provide this value.
+                Note that some columns may contain NANs in all rows. Only usefull if we are loading a previously trained model
+                on a new test set. In that case the model must have the exact same input size. Used in read_and_run.py
+        @return: The complete unsplitted set
         """
         pass
 
@@ -227,7 +234,6 @@ class BaseClassifier(abc.ABC):
         """
         write_log('Loading data')
         self.load_data()
-        self.predictions_to_labels
         write_log('Data loaded')
         write_log('Training network')
         net = self.compile_net()
@@ -360,10 +366,12 @@ class BaseClassifier(abc.ABC):
         Create predictions for a set
         @param net: The network to predict with
         @param x: The data to predict
-        @return:
+        @return: array of predictions
         """
         predictions = net.predict(x)
-        classes = np.argmax(predictions, axis=1)
-        if self.predictions_to_labels is not None:
-            classes = [self.predictions_to_labels[c] for c in classes]
-        return classes
+        # Apply bayes
+        if self.apply_bayes:
+            predictions = self._apply_bayes(predictions)
+            # Sum to 1
+            predictions = [p / sum(p) for p in predictions]
+        return predictions
