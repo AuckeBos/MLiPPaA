@@ -1,6 +1,6 @@
 # MLiPPaA
 
-This repo contains the code for the exam project of the course Machine Learning in Particle Physics &amp; Astronomy. The
+[This repo](https://github.com/AuckeBos/MLiPPaA) contains the code for the exam project of the course Machine Learning in Particle Physics &amp; Astronomy. The
 code is structured in a format that is required by the assignment, it is explained below.
 The [assignment](Assignment.pdf) itself can be found in the root of this repo.
 
