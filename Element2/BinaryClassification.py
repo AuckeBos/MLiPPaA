@@ -99,6 +99,7 @@ class BinaryClassifier(BaseClassifier):
         # Apply bayes
         if self.apply_bayes:
             predictions = self._apply_bayes(predictions)
+            # Sum to 1
             predictions = [p / sum(p) for p in predictions]
 
         # Convert back to binary: The prediction is the probability of y=1

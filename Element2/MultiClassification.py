@@ -40,7 +40,6 @@ class MultiClassifier(BaseClassifier):
         # Return complete unsplitted set
         return x, y
 
-
     def compile_net(self):
         """
         Use adam optimizer, categorical cross entropy
