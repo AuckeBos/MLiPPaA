@@ -1,15 +1,12 @@
 import argparse
+import csv
+
+import numpy as np
+import pandas as pd
+from tensorflow.keras.models import load_model
 
 import Element2.Evaluator
 from Element2.BaseClassification import BaseClassifier
-from Element2.BinaryClassification import BinaryClassifier
-from Element2.DataLoader import DataLoader
-from Element2.MultiClassification import MultiClassifier
-from Element2.RecurrentClassification import RecurrentClassifier
-from tensorflow.keras.models import load_model
-import csv
-import pandas as pd
-import numpy as np
 
 # As computed by the training data distribution (RebalanceTrainVal=False)
 multi_train_prior = np.array([.5, .125, .125, .125, .125])
@@ -20,6 +17,15 @@ binary_test_prior = np.array([.96, .04])
 
 
 def read():
+    """
+    Read command line arguments for the script:
+    - --data-file: The data file with the data to test. If not provided, use ExamData.csv in /data
+    - --classification-type: Classify binary or multiclass
+    - --model: Which type of model to use: The BinaryClassifier, MultiClassifier, or RecurrentClassifier
+    - --h5: The h5 file of the pretrained model, should match with --model
+    - --bayes: Apply bayes on the predictions
+    @return:
+    """
     parser = argparse.ArgumentParser(
         description='Load a model, test them on a test dataset; save predictions to csv',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -33,7 +39,19 @@ def read():
     return args.data_file, args.classification_type, args.model, args.h5, bool(args.bayes)
 
 
-def run(data_file, classification_type, model_type, h5, apply_bayes):
+def run(data_file: str, classification_type: str, model_type: str, h5: str, apply_bayes: bool):
+    """
+    After commandline args have been read, run the model:
+    - Load the classifier
+    - Load the data
+    - Predict the data
+    - Generate csv in the desired format (predictions.csv)
+    @param data_file: The file that contains the testset
+    @param classification_type: The type of classification: binary or multi
+    @param model_type: The classifier type: binary, multi, recurrent
+    @param h5:  The h5 file of the trained model
+    @param apply_bayes:  Bool that indicates whether to apply bayes on the predictions
+    """
     classifier = Element2.Evaluator.Evaluator.parse_classifier_type(model_type)
     classifier.apply_bayes = apply_bayes
     if model_type == 'binary':
