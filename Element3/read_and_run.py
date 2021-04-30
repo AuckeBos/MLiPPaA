@@ -30,7 +30,7 @@ def read():
         description='Load a model, test them on a test dataset; save predictions to csv',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument('-d', '--data-file', type=str, required=False, default='../Element2/data/ExamData.csv', help='The datafile containing the test data')
+    parser.add_argument('-d', '--data-file', type=str, required=False, default='../Element2/data/ExamData2.csv', help='The datafile containing the test data')
     parser.add_argument('-t', '--classification-type', type=str, required=True, choices=['binary', 'multi'], help='Classification type: multi label or binary')
     parser.add_argument('-m', '--model', type=str, required=True, choices=['binary', 'multi', 'recurrent'], help='Classification model: BinaryClassifier, MultiClassifier, or RecurrentClassifier')
     parser.add_argument('-h5', '--h5', type=str, required=True, help='The h5 file of the saved model')
